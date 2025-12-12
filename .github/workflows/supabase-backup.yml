@@ -2,7 +2,7 @@ name: Supabase Backup and Keep Alive
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # every midnight
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,22 +14,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y wget gnupg lsb-release
-
-          # Add PostgreSQL APT repo
           wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
           echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list
-
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
 
-          pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Create SQL backup
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          pg_dump "$DATABASE_URL" \
+          /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" \
             --format=plain \
             --no-owner \
             --no-privileges > backup.sql
