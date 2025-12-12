@@ -1,0 +1,38 @@
+name: Supabase Backup and Keep Alive
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # Every hour (you can change)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Create SQL backup (schema + data)
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --format=plain \
+            --no-owner \
+            --no-privileges > backup.sql
+
+      - name: Upload backup to Supabase Storage
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+
+          curl -X POST "$SUPABASE_URL/storage/v1/object/db-backups/backup_$TIMESTAMP.sql" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@backup.sql"
+
+      - name: Keep Supabase awake
+        run: |
+          curl -s \
+          "${{ secrets.SUPABASE_URL }}/rest/v1/health"
