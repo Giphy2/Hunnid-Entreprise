@@ -1,0 +1,47 @@
+name: Supabase Backup and Keep Alive
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Postgres 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Create SQL backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" \
+            --format=plain \
+            --no-owner \
+            --no-privileges > backup.sql
+
+      - name: Upload backup to Supabase Storage
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+          curl -X POST "$SUPABASE_URL/storage/v1/object/db-backups/backup_$TIMESTAMP.sql" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@backup.sql"
+
+      - name: Keep Supabase awake
+        run: |
+          curl -s "${{ secrets.SUPABASE_URL }}/rest/v1/health"
